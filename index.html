@@ -198,6 +198,16 @@
   }
   #pawCounter span{ color:var(--hot-pink); opacity:.6; }
 
+  #soundHint{
+    position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:25;
+    font-family:'Space Grotesk',sans-serif; font-weight:400; font-size:12px; letter-spacing:2px;
+    color:var(--cream); background:rgba(20,8,30,.55); border:1px solid rgba(255,46,136,.4);
+    padding:10px 18px; border-radius:30px; backdrop-filter:blur(6px);
+    opacity:0; pointer-events:auto; cursor:pointer; transition:opacity .3s ease;
+    text-transform:uppercase;
+  }
+  #soundHint.show{ opacity:.95; }
+
   @media (pointer:fine){
     html,body{
       cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5' fill='%23ff2e88' opacity='0.6'/%3E%3C/svg%3E") 12 12, auto;
@@ -223,6 +233,8 @@
   </div>
 </div>
 
+<div id="soundHint">✦ tap for sound ✦</div>
+
 <div id="lyricsBox"><span id="lyricLine"></span></div>
 
 <div id="progressWrap"><div id="progressBar"></div></div>
@@ -240,7 +252,7 @@
   <div class="tapPrompt">tap anywhere</div>
 </div>
 
-<audio id="audio" src="music.mp3" preload="auto"></audio>
+<audio id="audio" src="music.mp3" preload="auto" playsinline webkit-playsinline></audio>
 
 <script>
 (function(){
@@ -325,6 +337,7 @@ const chaosFlash = document.getElementById('chaosFlash');
 const modeLabel = document.getElementById('modeLabel');
 const counter = document.getElementById('counter');
 const pawCountEl = document.getElementById('pawCount');
+const soundHint = document.getElementById('soundHint');
 
 let W, H, DPR;
 function resize(){
@@ -1448,17 +1461,38 @@ progressWrap.addEventListener('pointerdown', (e)=>{
   e.stopPropagation();
 });
 
-function tryStart(){
-  if(started) return;
-  started = true;
-  enableGyro();
 
+let startHandled = false;
+
+function unlockAndPlayAudio(){
+  audio.muted = false;
   audio.volume = 0.9;
+  try { audio.load(); } catch(e){}
+
   const p = audio.play();
   if(p !== undefined){
-    p.then(()=>{ hasAudio = true; }).catch(()=>{ hasAudio = false; startTime = performance.now(); });
-  } else { hasAudio = false; startTime = performance.now(); }
-  if(startTime===0) startTime = performance.now();
+    p.then(()=>{
+      hasAudio = true;
+      soundHint.classList.remove('show');
+    }).catch(()=>{
+      hasAudio = false;
+      if(startTime===0) startTime = performance.now();
+      soundHint.classList.add('show');
+    });
+  } else {
+    hasAudio = false;
+    if(startTime===0) startTime = performance.now();
+  }
+}
+
+function tryStart(e){
+  if(startHandled) return;
+  startHandled = true;
+  started = true;
+
+  unlockAndPlayAudio();
+
+  enableGyro();
 
   startScreen.classList.add('hide');
   burst(W/2, H*0.43, 50);
@@ -1469,7 +1503,20 @@ function tryStart(){
   }
   setTimeout(()=>{ startScreen.style.display='none'; }, 950);
 }
-startScreen.addEventListener('pointerdown', tryStart);
+
+startScreen.addEventListener('pointerdown', tryStart, { once:true });
+startScreen.addEventListener('touchend', tryStart, { once:true });
+startScreen.addEventListener('click', tryStart, { once:true });
+
+soundHint.addEventListener('pointerdown', (e)=>{
+  e.stopPropagation();
+  unlockAndPlayAudio();
+});
+window.addEventListener('pointerdown', ()=>{
+  if(started && !hasAudio && audio.paused){
+    unlockAndPlayAudio();
+  }
+}, { passive:true });
 
 let muted = false;
 muteBtn.addEventListener('click', (e)=>{
